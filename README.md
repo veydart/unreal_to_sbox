@@ -1,4 +1,4 @@
-# 🌳 Unreal Engine 5 to s&box Exporter (Complete Guide)
+# 🌳 Unreal Engine 5.5 to s&box Exporter (Complete Guide)
 
 This huge and complex Python script (`export_to_sbox.py`) automatically ports any selected objects (Static Meshes, Skeletal Meshes) from Unreal Engine 5 directly into your s&box / Source 2 project, creating 100% game-ready graphics with a single click.
 
