@@ -1,4 +1,4 @@
-# 🌳 Unreal Engine 5 to s&box Exporter (Полная Инструкция)
+# 🌳 Unreal Engine 5.5 to s&box Exporter (Полная Инструкция)
 
 Этот гигантский и сложный Python-скрипт (`export_to_sbox.py`) автоматически портирует любые выделенные объекты (Static Meshes, Skeletal Meshes) из движка Unreal Engine 5 прямиком в ваш проект для s&box / Source 2, создавая 100% готовую к игре графику по одному клику.
 
