@@ -1,21 +1,23 @@
-# 🌳 Unreal Engine 5.5 to s&box Exporter (Complete Guide)
+# 📦 Universal Exporter: Unreal Engine 5 ➡️ s&box (Complete Guide)
 
-This huge and complex Python script (`export_to_sbox.py`) automatically ports any selected objects (Static Meshes, Skeletal Meshes) from Unreal Engine 5 directly into your s&box / Source 2 project, creating 100% game-ready graphics with a single click.
+This huge and complex Python script (`export_to_sbox.py`) automatically ports **any** selected objects (Vehicles, Buildings, Props, Foliage, Skeletal Meshes) from Unreal Engine 5 directly into your s&box / Source 2 project, creating 100% game-ready graphics with a single click.
 
 ---
 
 ## 🔥 What exactly does the script do "under the hood"?
 
-1. **Folder Mirroring**: If your tree was located in the `/Game/Nature/Trees/Pine_01/` folder, the script will physically recreate this exact beautiful folder hierarchy inside your `s&box/Assets/...` project. No more dumping hundreds of images into one messy folder!
+1. **Folder Mirroring**: If your vehicle was located in the `/Game/Vehicles/Sedan_01/` folder, the script will physically recreate this exact beautiful folder hierarchy inside your `s&box/Assets/...` project. No more dumping hundreds of images into one messy folder!
 2. **Geometry Export**: Silent and error-free export of `.fbx` geometry with all smoothing groups, LOD options, and tangents intact.
-3. **.vmdl (ModelDoc) Generation**: Automatic assembly of the Source 2 model, generating basic physical collision hulls, and linking materials natively through Remaps.
+3. **.vmdl (ModelDoc) Generation and Smart LODs**: Automatic assembly of the Source 2 model, generating basic physical collision hulls, and linking materials natively through Remaps. **Crucially, it procedurally identifies and parses UE LOD arrays**. If you prompt the script to generate LODs (or the model natively has them), it perfectly structures the Source 2 LODGroup hierarchies.
 4. **Smart PBR Parsing**:
    - Automatically calculates UV Scaling from the Unreal material graph (reading `Texture Coord X` and `Y` scaling scalar parameters natively on the fly).
-   - Perfectly "slices" heavy `_rma` / `_rsa` packed textures into 3 separate lightweight black-and-white masks (AO, Roughness, Metallic) and **immediately deletes the junk originals behind it**, freeing up tens of megabytes of redundant hard drive space per tree.
+   - Perfectly "slices" heavy compound `_rma` / `_rsa` packed textures into 3 separate lightweight masks (AO, Roughness, Metallic) and **immediately deletes the junk originals behind it**, freeing up gigabytes of redundant hard drive space per environment.
 5. **Shader Magic (`complex.vfx`)**:
-   - Automatically maps and enables **Alpha Test** transparency and two-sided geometry rendering (`F_RENDER_BACKFACES`) for all leaves.
-   - For opaque surfaces like bark, it automatically enables 3D-relief (**Parallax Occlusion Mapping**) with an optimized depth metric of `g_flHeightMapScale 0.030`.
-   - Automatically enables micro-normal map scaling and self-shadowing (which would normally completely break leaf transparency, but the script mathematically "sees" the transparency and actively blocks these checkboxes for leaves!).
+   - Automatically maps and enables **Alpha Test** transparency and two-sided rendering (`F_RENDER_BACKFACES`) for leaves and metal grilles.
+   - Automatically routes solid gradients into **Translucent** blend modes for vehicle glass.
+   - For opaque detailed surfaces like bark or brick, it automatically enables 3D-relief (**Parallax Occlusion Mapping**).
+   - Automatically enables micro-normal map scaling and self-shadowing (intelligently disabling these checkboxes mathematically on glass or foliage to prevent graphical bugs).
+   - The script strictly analyzes context: if it recognizes foliage, it routes it to organic optimizers. If it's a vehicle or prop (`LargeProp`), it pushes it to structural geometry algorithms!
 
 ---
 
@@ -30,9 +32,9 @@ This huge and complex Python script (`export_to_sbox.py`) automatically ports an
 
 ## 🖥️ Variant 1: Usage without a UI Button (Via Console)
 
-This method is highly suitable if you want to perform a quick one-off export, debugging, or if you prefer not to create custom UI buttons.
+This method is highly suitable if you want to perform a quick one-off batch export, debugging, or if you prefer not to create custom UI buttons.
 
-1. In the bottom Unreal Engine window (**Content Browser**), select one or multiple trees (`Static Mesh`) that you want to export.
+1. In the bottom Unreal Engine window (**Content Browser**), select one or multiple assets (`Static Mesh`, `Skeletal Mesh`) that you want to instantly export (e.g. cars, props, architectural assets).
 2. At the very bottom left corner of the Unreal Editor window, find the `Cmd` console input line. Click on the `Cmd` text and switch its execution mode to **Python**.
 3. Copy the following code, paste it into this console window, and press **Enter**:
 
@@ -84,7 +86,7 @@ export_to_sbox.export_selected_to_sbox(r"H:\sbox\my_project_2\Assets")
 11. Click the **Compile** checkmark at the top left and the **Save** floppy disk button. The warning icons should disappear. The blueprint can now be permanently closed.
 
 ### 🎉 How to use it:
-1. Select any number of tree models simultaneously in the Unreal Engine window.
+1. Select any number of 3D models (even 50 at once) simultaneously in the Unreal Engine Content Browser.
 2. **Right-Click** on any of them.
 3. In the massive list of the context menu, locate the **Scripted Asset Actions** sub-menu.
 4. Select **`Export To Sbox`**.

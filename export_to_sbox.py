@@ -2,6 +2,13 @@ import unreal
 import os
 import struct
 
+# --- EXPORT SETTINGS ---
+# Если True, скрипт будет автоматически генерировать LOD-ы перед экспортом в FBX
+AUTO_GENERATE_LODS = True
+# Группа настроек LOD по умолчанию (например: "Foliage", "LargeProp", "SmallProp")
+DEFAULT_LOD_GROUP = "LargeProp"
+# -----------------------
+
 def extract_tga_alpha(base_tga_path):
     if not os.path.exists(base_tga_path):
         return None
@@ -110,6 +117,36 @@ def export_selected_to_sbox(export_dir):
     for asset in exportable_assets:
         asset_name = asset.get_name()
         
+        # Узнаем текущее количество геометрических слоев до экспорта
+        lod_count = 1
+        if isinstance(asset, unreal.StaticMesh):
+            lod_count = unreal.EditorStaticMeshLibrary.get_lod_count(asset)
+            
+        # --- Auto LOD Generation ---
+        # Если модель "голая" (всего 1 LOD), то скрипт генерирует их сам.
+        # Если автор модели УЖЕ сделал кастомные LOD-ы (2 и более), мы ИХ НЕ ТРОГАЕМ и просто забираем!
+        if AUTO_GENERATE_LODS and isinstance(asset, unreal.StaticMesh) and lod_count == 1:
+            try:
+                # Включаем "Умное" распознавание: если это дерево, применяем специальный силуэт Foliage
+                l_name = asset_name.lower()
+                l_path = str(asset.get_path_name()).lower()
+                lod_name = unreal.Name("Foliage") if ("tree" in l_name or "foliage" in l_name or "bush" in l_name or "tree" in l_path or "foliage" in l_path) else unreal.Name(DEFAULT_LOD_GROUP)
+                
+                # Принудительно вписываем свойство напрямую в ячейку памяти ассета
+                asset.set_editor_property("lod_group", lod_name)
+                
+                # Запускаем перестроение полигонов
+                unreal.EditorStaticMeshLibrary.set_lod_group(asset, lod_name, True)
+                
+                unreal.EditorAssetLibrary.save_asset(asset.get_path_name())
+                unreal.log(f"Auto-Generated LODs for {asset_name}")
+                
+                # Обновляем счетчик LOD-ов, так как мы их только что сгенерировали
+                lod_count = unreal.EditorStaticMeshLibrary.get_lod_count(asset)
+            except Exception as e:
+                unreal.log_warning(f"Failed to auto-generate LODs for {asset_name}: {e}")
+        # ---------------------------
+        
         package_name = str(asset.get_path_name()).split('.')[0]
         rel_dir = os.path.dirname(package_name.replace("/Game/", ""))
         final_dir = os.path.normpath(os.path.join(export_dir, rel_dir))
@@ -124,9 +161,8 @@ def export_selected_to_sbox(export_dir):
         task.automated = True
         task.prompt = False
         task.options = unreal.FbxExportOption()
-        task.options.vertex_color = True
         task.options.collision = False
-        task.options.level_of_detail = False
+        task.options.level_of_detail = True
         unreal.Exporter.run_asset_export_task(task)
         unreal.log(f"Exported FBX: {fbx_path}")
         
@@ -157,7 +193,7 @@ def export_selected_to_sbox(export_dir):
             
             export_material_and_textures(mat_interface, export_dir, vmat_filename_str)
 
-        generate_vmdl(final_dir, asset_name.lower(), fbx_filename, material_remaps, rel_dir)
+        generate_vmdl(final_dir, asset_name.lower(), fbx_filename, material_remaps, rel_dir, lod_count, asset_name)
 
 
 def export_material_and_textures(mat_interface, output_dir, vmat_filename_str):
@@ -434,7 +470,7 @@ Layer0
     unreal.log(f"Generated VMAT: {vmat_path}")
 
 
-def generate_vmdl(target_dir, model_name, fbx_filename, material_remaps, rel_dir):
+def generate_vmdl(target_dir, model_name, fbx_filename, material_remaps, rel_dir, lod_count=1, original_asset_name=""):
     vmdl_path = os.path.join(target_dir, f"{model_name}.vmdl")
     
     remaps_str = ""
@@ -445,15 +481,56 @@ def generate_vmdl(target_dir, model_name, fbx_filename, material_remaps, rel_dir
                             }},\n"""
 
     fbx_rel_path = f"{rel_dir}/{fbx_filename}".replace("\\", "/")
-
-    vmdl_content = f"""<!-- kv3 encoding:text:version{{e21c7f3c-8a33-41c5-9977-a76d3a32aa0d}} format:modeldoc29:version{{3cec427c-1b0e-4d48-a90a-0436f33a6041}} -->
-{{
-    rootNode = 
-    {{
-        _class = "RootNode"
-        children = 
-        [
-            {{
+    
+    lod_group_list_str = ""
+    if lod_count > 1:
+        lod_groups = []
+        render_meshes = []
+        thresholds = [0.0, 30.0, 60.0, 100.0, 150.0, 250.0]
+        
+        for i in range(lod_count):
+            thresh = thresholds[i] if i < len(thresholds) else float(i * 100)
+            lod_groups.append(f"""                    {{
+                        _class = "LODGroup"
+                        switch_threshold = {thresh}
+                        meshes = [ "LOD{i}" ]
+                    }},""")
+                    
+            render_meshes.append(f"""                    {{
+                        _class = "RenderMeshFile"
+                        name = "LOD{i}"
+                        filename = "{fbx_rel_path}"
+                        import_translation = [ 0.0, 0.0, 0.0 ]
+                        import_rotation = [ 0.0, 0.0, 0.0 ]
+                        import_scale = 0.393701
+                        align_origin_x_type = "None"
+                        align_origin_y_type = "None"
+                        align_origin_z_type = "None"
+                        parent_bone = ""
+                        import_filter = 
+                        {{
+                            exclude_by_default = true
+                            exception_list = [ "{original_asset_name}_LOD{i}" ]
+                        }}
+                    }},""")
+                    
+        lod_group_list_str = f"""            {{
+                _class = "LODGroupList"
+                children = 
+                [
+{chr(10).join(lod_groups)}
+                ]
+            }},"""
+            
+        render_mesh_list_str = f"""            {{
+                _class = "RenderMeshList"
+                children = 
+                [
+{chr(10).join(render_meshes)}
+                ]
+            }},"""
+    else:
+        render_mesh_list_str = f"""            {{
                 _class = "RenderMeshList"
                 children = 
                 [
@@ -474,7 +551,17 @@ def generate_vmdl(target_dir, model_name, fbx_filename, material_remaps, rel_dir
                         }}
                     }},
                 ]
-            }},
+            }},"""
+
+    vmdl_content = f"""<!-- kv3 encoding:text:version{{e21c7f3c-8a33-41c5-9977-a76d3a32aa0d}} format:modeldoc29:version{{3cec427c-1b0e-4d48-a90a-0436f33a6041}} -->
+{{
+    rootNode = 
+    {{
+        _class = "RootNode"
+        children = 
+        [
+{lod_group_list_str}
+{render_mesh_list_str}
             {{
                 _class = "PhysicsShapeList"
                 children = 
