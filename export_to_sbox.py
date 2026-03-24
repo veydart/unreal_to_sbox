@@ -278,13 +278,20 @@ def export_material_and_textures(mat_interface, output_dir, vmat_filename_str):
         except Exception as e:
             unreal.log_warning(f"Failed to read MaterialInstance textures: {e}")
 
+    is_masked = False
+    is_translucent = False
     try:
         blend_mode = mat_interface.get_blend_mode()
-        is_transparent = (blend_mode == unreal.BlendMode.BLEND_MASKED) or (blend_mode == unreal.BlendMode.BLEND_TRANSLUCENT)
+        if blend_mode == unreal.BlendMode.BLEND_MASKED:
+            is_masked = True
+        elif blend_mode == unreal.BlendMode.BLEND_TRANSLUCENT:
+            is_translucent = True
     except Exception:
-        is_transparent = False
+        pass
+        
+    is_transparent = is_masked or is_translucent
 
-    unreal.log(f"Found {len(deps)} asset dependencies for material {vmat_filename_str}. Transparent: {is_transparent}")
+    unreal.log(f"Found {len(deps)} asset dependencies for material {vmat_filename_str}. Masked: {is_masked}, Translucent: {is_translucent}")
     
     # Second pass: ensure missing dependencies mapped and textures actually exported
     for dep_path in deps:
@@ -348,9 +355,12 @@ Layer0
     g_vTexCoordScale "[{uv_scale[0]:.3f} {uv_scale[1]:.3f}]"
     
 """
-    if is_transparent:
+    if is_masked:
         vmat_content += '    F_ALPHA_TEST 1\n'
         vmat_content += '    g_flAlphaTestReference "0.500"\n'
+        vmat_content += '    F_RENDER_BACKFACES 1\n'
+    elif is_translucent:
+        vmat_content += '    F_TRANSLUCENT 1\n'
         vmat_content += '    F_RENDER_BACKFACES 1\n'
 
     if texture_paths["Normal"]:
